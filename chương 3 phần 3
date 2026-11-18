@@ -1,0 +1,172 @@
+import cmath
+import numpy as np
+import streamlit as st
+
+
+# ==========================================
+# 1. LÕI THUẬT TOÁN MA TRẬN VI BA
+# ==========================================
+class MicrowaveEngine:
+
+  @staticmethod
+  def y_to_s(Y: np.ndarray, Z0: float = 50.0) -> np.ndarray:
+    N = Y.shape[0]
+    I = np.eye(N, dtype=complex)
+    Y_bar = Y * Z0
+    return np.dot(I - Y_bar, np.linalg.inv(I + Y_bar))
+
+  @staticmethod
+  def s_to_y(S: np.ndarray, Z0: float = 50.0) -> np.ndarray:
+    N = S.shape[0]
+    I = np.eye(N, dtype=complex)
+    return np.dot(I - S, np.linalg.inv(I + S)) / Z0
+
+  @staticmethod
+  def abcd_to_s(ABCD: np.ndarray, Z0: float = 50.0) -> np.ndarray:
+    A, B, C, D = ABCD[0, 0], ABCD[0, 1], ABCD[1, 0], ABCD[1, 1]
+    delta = A + (B / Z0) + (C * Z0) + D
+    det_abcd = A * D - B * C
+    return np.array(
+        [
+            [(A + (B / Z0) - (C * Z0) - D) / delta, 2.0 * det_abcd / delta],
+            [2.0 / delta, (-A + (B / Z0) - (C * Z0) + D) / delta],
+        ],
+        dtype=complex,
+    )
+
+  @staticmethod
+  def s_to_abcd(S: np.ndarray, Z0: float = 50.0) -> np.ndarray:
+    S11, S12 = S[0, 0], S[0, 1]
+    S21, S22 = S[1, 0], S[1, 1]
+    return np.array(
+        [
+            [
+                ((1.0 + S11) * (1.0 - S22) + S12 * S21) / (2.0 * S21),
+                Z0 * (((1.0 + S11) * (1.0 + S22) - S12 * S21) / (2.0 * S21)),
+            ],
+            [
+                (1.0 / Z0)
+                * (((1.0 - S11) * (1.0 - S22) - S12 * S21) / (2.0 * S21)),
+                ((1.0 - S11) * (1.0 + S22) + S12 * S21) / (2.0 * S21),
+            ],
+        ],
+        dtype=complex,
+    )
+
+  @staticmethod
+  def check_properties(S: np.ndarray) -> dict:
+    tol = 1e-5
+    is_reciprocal = np.allclose(S, S.T, atol=tol)
+    is_symmetric = np.isclose(S[0, 0], S[1, 1], atol=tol) and np.isclose(
+        S[0, 1], S[1, 0], atol=tol
+    )
+    is_lossless = np.allclose(
+        np.dot(np.conjugate(S.T), S), np.eye(S.shape[0]), atol=tol
+    )
+    return {
+        "Reciprocal": is_reciprocal,
+        "Symmetric": is_symmetric,
+        "Lossless": is_lossless,
+    }
+
+
+# ==========================================
+# 2. GIAO DIỆN WEB STREAMLIT
+# ==========================================
+st.set_page_config(
+    page_title="Phần mềm Ma trận Vi ba", page_icon="📡", layout="centered"
+)
+st.title("Chuyển đổi Ma trận Mạng Vi ba [Đề tài số 3]")
+
+mode = st.selectbox(
+    "Chọn phép chuyển đổi:",
+    [
+        "ABCD -> S (Mạng 2 cửa)",
+        "S -> ABCD (Mạng 2 cửa)",
+        "Y -> S (Mạng 2 cửa)",
+        "S -> Y (Mạng 2 cửa)",
+    ],
+)
+Z0 = st.number_input(
+    "Trở kháng chuẩn Z0 (Ω):", value=50.0, step=1.0, min_value=1.0
+)
+
+sample_choice = st.radio(
+    "Nạp nhanh dữ liệu mẫu:",
+    ["Đường dây λ/4 (ABCD)", "Bộ suy hao 3 dB (Y)", "Mặc định (0)"],
+    horizontal=True,
+)
+
+if sample_choice == "Đường dây λ/4 (ABCD)":
+  def_val = [["0", "50j"], ["0.02j", "0"]]
+elif sample_choice == "Bộ suy hao 3 dB (Y)":
+  def_val = [["0.06024", "-0.05682"], ["-0.05682", "0.06024"]]
+else:
+  def_val = [["0", "0"], ["0", "0"]]
+
+st.write("### Ma trận đầu vào (hỗ trợ số thực hoặc số phức `a+bj`):")
+col1, col2 = st.columns(2)
+m11 = col1.text_input("Phần tử [1,1]:", def_val[0][0])
+m12 = col2.text_input("Phần tử [1,2]:", def_val[0][1])
+m21 = col1.text_input("Phần tử [2,1]:", def_val[1][0])
+m22 = col2.text_input("Phần tử [2,2]:", def_val[1][1])
+
+if st.button("Thực hiện chuyển đổi", type="primary"):
+  try:
+    in_mat = np.array(
+        [
+            [complex(m11.replace(" ", "")), complex(m12.replace(" ", ""))],
+            [complex(m21.replace(" ", "")), complex(m22.replace(" ", ""))],
+        ],
+        dtype=complex,
+    )
+
+    if mode == "ABCD -> S (Mạng 2 cửa)":
+      out_mat = MicrowaveEngine.abcd_to_s(in_mat, Z0)
+      s_eval = out_mat
+      name_res = "Ma trận Tán xạ [S]"
+    elif mode == "S -> ABCD (Mạng 2 cửa)":
+      out_mat = MicrowaveEngine.s_to_abcd(in_mat, Z0)
+      s_eval = in_mat
+      name_res = "Ma trận Truyền đạt [ABCD]"
+    elif mode == "Y -> S (Mạng 2 cửa)":
+      out_mat = MicrowaveEngine.y_to_s(in_mat, Z0)
+      s_eval = out_mat
+      name_res = "Ma trận Tán xạ [S]"
+    else:
+      out_mat = MicrowaveEngine.s_to_y(in_mat, Z0)
+      s_eval = in_mat
+      name_res = "Ma trận Dẫn nạp [Y] (S)"
+
+    props = MicrowaveEngine.check_properties(s_eval)
+    st.success(f"Kết quả {name_res}:")
+
+    st.write("**1. Dạng Cartesian ($R + jX$):**")
+    cartesian_view = [
+        [f"{out_mat[i, j].real:.5f} + {out_mat[i, j].imag:.5f}j" for j in range(2)]
+        for i in range(2)
+    ]
+    st.table(cartesian_view)
+
+    st.write("**2. Dạng Cực (Biên độ $\\angle$ Góc Pha):**")
+    polar_view = [
+        [
+            (
+                f"{abs(out_mat[i, j]):.4f} ∠"
+                f" {np.degrees(cmath.phase(out_mat[i, j])):.2f}°"
+            )
+            for j in range(2)
+        ]
+        for i in range(2)
+    ]
+    st.table(polar_view)
+
+    st.info(
+        f"**Đánh giá tính chất mạng vi ba:**\n\n"
+        f"- **Tính tương hỗ (Reciprocal):** {'CÓ' if props['Reciprocal'] else 'KHÔNG'}\n\n"
+        f"- **Tính đối xứng (Symmetrical):** {'CÓ' if props['Symmetric'] else 'KHÔNG'}\n\n"
+        f"- **Tính không tiêu tán (Lossless):**"
+        f" {'CÓ' if props['Lossless'] else 'KHÔNG'}"
+    )
+  except Exception as err:
+    st.error(f"Lỗi cú pháp hoặc suy biến: {err}")
