@@ -4,7 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Mô phỏng AI Tối ưu Beamforming - Massive MIMO 5G</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     :root {
       --bg: #f4f7fb;
@@ -37,7 +36,7 @@
     }
     .card h2 {
       margin: 0 0 14px;
-      font-size: 1.08rem;
+      font-size: 1.06rem;
       color: #0f172a;
       border-left: 4px solid var(--primary);
       padding-left: 10px;
@@ -85,9 +84,11 @@
       display: flex;
       align-items: center;
       gap: 12px;
+      flex-wrap: wrap;
     }
     .progress-wrap {
       flex: 1;
+      min-width: 180px;
       height: 8px;
       background: #e2e8f0;
       border-radius: 99px;
@@ -116,16 +117,17 @@
     .kpi-box .kpi-sub { font-size: 0.8rem; color: #475569; }
     .charts-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(390px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
       gap: 20px;
     }
-    .chart-box { position: relative; height: 320px; width: 100%; }
+    .chart-box { position: relative; height: 310px; width: 100%; }
+    .chart-box canvas { width: 100%; height: 100%; display: block; }
     .beam-slider-row {
       display: flex;
       align-items: center;
-      gap: 12px;
-      margin-bottom: 10px;
-      font-size: 0.88rem;
+      gap: 10px;
+      margin-bottom: 8px;
+      font-size: 0.86rem;
       font-weight: 600;
     }
     table.summary-table {
@@ -151,7 +153,6 @@
 </header>
 
 <div class="container">
-  <!-- BẢNG THAM SỐ ĐIỀU KHIỂN -->
   <div class="card">
     <h2>1. Cấu hình tham số hệ thống & Mô hình AI</h2>
     <div class="controls-grid">
@@ -205,7 +206,6 @@
     </div>
   </div>
 
-  <!-- CHỈ SỐ KPI TỔNG HỢP -->
   <div class="kpi-grid">
     <div class="kpi-box">
       <div class="kpi-title">Độ chính xác AI (Top-1 Accuracy)</div>
@@ -229,7 +229,6 @@
     </div>
   </div>
 
-  <!-- 3 ĐỒ THỊ CHÍNH -->
   <div class="charts-grid">
     <div class="card">
       <h2>2. Đồ thị bức xạ DFT Codebook (Beam Pattern)</h2>
@@ -252,7 +251,6 @@
     </div>
   </div>
 
-  <!-- BẢNG SỐ LIỆU CHI TIẾT -->
   <div class="card">
     <h2>5. Bảng tổng hợp kết quả định lượng theo từng mức SNR</h2>
     <table class="summary-table">
@@ -277,6 +275,142 @@
 </footer>
 
 <script>
+// =========================================================
+// BỘ VẼ BIỂU ĐỒ NỘI BỘ HTML5 CANVAS (KHÔNG CẦN THƯ VIỆN NGOÀI)
+// =========================================================
+function drawLineChart(canvasId, cfg) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const parent = canvas.parentElement;
+  const width = Math.max(parent.clientWidth || 360, 280);
+  const height = Math.max(parent.clientHeight || 300, 240);
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = width * dpr;
+  canvas.height = height * dpr;
+
+  const ctx = canvas.getContext("2d");
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, width, height);
+
+  const hasRightAxis = cfg.datasets.some(d => d.axis === "right");
+  const pad = { top: 36, right: hasRightAxis ? 54 : 20, bottom: 44, left: 54 };
+  const plotW = width - pad.left - pad.right;
+  const plotH = height - pad.top - pad.bottom;
+
+  // Khung lưới & trục tọa độ
+  ctx.strokeStyle = "#e2e8f0";
+  ctx.lineWidth = 1;
+  const yTicks = 5;
+  for (let i = 0; i <= yTicks; i++) {
+    const y = pad.top + (plotH * i) / yTicks;
+    ctx.beginPath();
+    ctx.moveTo(pad.left, y);
+    ctx.lineTo(pad.left + plotW, y);
+    ctx.stroke();
+
+    const valLeft = cfg.yMax - ((cfg.yMax - cfg.yMin) * i) / yTicks;
+    ctx.fillStyle = "#475569";
+    ctx.font = "11px Segoe UI, sans-serif";
+    ctx.textAlign = "right";
+    ctx.textBaseline = "middle";
+    ctx.fillText(valLeft.toFixed(cfg.yDecimals ?? 1), pad.left - 7, y);
+
+    if (hasRightAxis) {
+      const valRight = cfg.y2Max - ((cfg.y2Max - cfg.y2Min) * i) / yTicks;
+      ctx.fillStyle = "#059669";
+      ctx.textAlign = "left";
+      ctx.fillText(valRight.toFixed(0) + "%", pad.left + plotW + 7, y);
+    }
+  }
+
+  // Nhãn trục X
+  const nPts = cfg.labels.length;
+  const stepX = Math.max(1, Math.floor(nPts / 6));
+  ctx.fillStyle = "#475569";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  for (let i = 0; i < nPts; i += stepX) {
+    const x = pad.left + (nPts > 1 ? (plotW * i) / (nPts - 1) : plotW / 2);
+    ctx.fillText(String(cfg.labels[i]), x, pad.top + plotH + 7);
+  }
+
+  // Tên trục X & Y
+  ctx.fillStyle = "#0f172a";
+  ctx.font = "bold 11.5px Segoe UI, sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText(cfg.xTitle || "", pad.left + plotW / 2, height - 15);
+
+  ctx.save();
+  ctx.translate(14, pad.top + plotH / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText(cfg.yTitle || "", 0, 0);
+  ctx.restore();
+
+  if (hasRightAxis && cfg.y2Title) {
+    ctx.save();
+    ctx.fillStyle = "#059669";
+    ctx.translate(width - 12, pad.top + plotH / 2);
+    ctx.rotate(Math.PI / 2);
+    ctx.fillText(cfg.y2Title, 0, 0);
+    ctx.restore();
+  }
+
+  // Vẽ các đường dữ liệu
+  cfg.datasets.forEach(ds => {
+    const minV = ds.axis === "right" ? cfg.y2Min : cfg.yMin;
+    const maxV = ds.axis === "right" ? cfg.y2Max : cfg.yMax;
+    ctx.save();
+    ctx.strokeStyle = ds.color;
+    ctx.lineWidth = ds.width || 2;
+    if (ds.dash) ctx.setLineDash(ds.dash);
+
+    ctx.beginPath();
+    ds.data.forEach((v, idx) => {
+      const x = pad.left + (nPts > 1 ? (plotW * idx) / (nPts - 1) : plotW / 2);
+      const clamped = Math.max(minV, Math.min(maxV, v));
+      const y = pad.top + plotH - ((clamped - minV) / Math.max(maxV - minV, 1e-6)) * plotH;
+      if (idx === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    if (ds.fill) {
+      ctx.lineTo(pad.left + plotW, pad.top + plotH);
+      ctx.lineTo(pad.left, pad.top + plotH);
+      ctx.closePath();
+      ctx.fillStyle = ds.fill;
+      ctx.fill();
+    }
+
+    if (ds.points) {
+      ctx.setLineDash([]);
+      ctx.fillStyle = ds.color;
+      ds.data.forEach((v, idx) => {
+        const x = pad.left + (nPts > 1 ? (plotW * idx) / (nPts - 1) : plotW / 2);
+        const clamped = Math.max(minV, Math.min(maxV, v));
+        const y = pad.top + plotH - ((clamped - minV) / Math.max(maxV - minV, 1e-6)) * plotH;
+        ctx.beginPath();
+        ctx.arc(x, y, 3.2, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+    ctx.restore();
+  });
+
+  // Chú thích (Legend) phía trên
+  let legX = pad.left;
+  ctx.font = "11px Segoe UI, sans-serif";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  cfg.datasets.forEach(ds => {
+    ctx.fillStyle = ds.color;
+    ctx.fillRect(legX, 13, 14, 3);
+    ctx.fillStyle = "#1e293b";
+    ctx.fillText(ds.label, legX + 18, 14);
+    legX += ctx.measureText(ds.label).width + 32;
+  });
+}
+
 // =========================================================
 // 1. TOÁN HỌC MẢNG ANTEN, DFT CODEBOOK & KÊNH ĐA ĐƯỜNG
 // =========================================================
@@ -331,7 +465,7 @@ function generateChannel(Nt, L) {
   const im = new Float64Array(Nt);
   const normFactor = Math.sqrt(Nt / L);
   for (let l = 0; l < L; l++) {
-    const weight = (l === 0) ? 2.8 : 1.0; // Đường LOS mạnh hơn NLOS
+    const weight = (l === 0) ? 2.8 : 1.0;
     const aRe = (randn() / Math.SQRT2) * weight;
     const aIm = (randn() / Math.SQRT2) * weight;
     const theta = (Math.random() - 0.5) * Math.PI;
@@ -345,7 +479,6 @@ function generateChannel(Nt, L) {
 }
 
 function extractFeatures(hEst, Nt) {
-  // Chuẩn hóa pha theo phần tử anten 0 để khử xoay pha ngẫu nhiên
   const phase0 = Math.atan2(hEst.im[0], hEst.re[0]);
   const cosP = Math.cos(-phase0);
   const sinP = Math.sin(-phase0);
@@ -377,7 +510,7 @@ function exhaustiveSearch(W, h) {
 }
 
 // =========================================================
-// 2. MẠNG NƠ-RON SÂU (DNN) & BỘ TỐI ƯU ADAM TRÊN JAVASCRIPT
+// 2. MẠNG NƠ-RON SÂU (DNN) & BỘ TỐI ƯU ADAM
 // =========================================================
 class BeamDNN {
   constructor(inDim, outDim) {
@@ -455,7 +588,6 @@ class BeamDNN {
       const x = batchX[b];
       const y = batchY[b];
 
-      // Forward
       for (let j = 0; j < this.h1; j++) {
         let s = this.b1[j];
         for (let i = 0; i < this.inDim; i++) s += x[i] * this.W1[i * this.h1 + j];
@@ -483,13 +615,10 @@ class BeamDNN {
       for (let j = 0; j < this.outDim; j++) probs[j] /= sumExp;
       batchLoss -= Math.log(Math.max(probs[y], 1e-9));
 
-      // Backward
-      const dLogits = probs;
-      dLogits[y] -= 1.0;
-
+      probs[y] -= 1.0;
       const da2 = new Float32Array(this.h2);
       for (let j = 0; j < this.outDim; j++) {
-        const dl = dLogits[j] / B;
+        const dl = probs[j] / B;
         gb3[j] += dl;
         for (let i = 0; i < this.h2; i++) {
           gW3[i * this.outDim + j] += a2[i] * dl;
@@ -518,7 +647,6 @@ class BeamDNN {
       }
     }
 
-    // Adam Update
     this.t += 1;
     const grads = [gW1, gb1, gW2, gb2, gW3, gb3];
     const b1Pow = 1.0 - Math.pow(0.9, this.t);
@@ -541,9 +669,8 @@ class BeamDNN {
 }
 
 // =========================================================
-// 3. QUẢN LÝ BIỂU ĐỒ & KỊCH BẢN MÔ PHỎNG
+// 3. QUẢN LÝ BIỂU ĐỒ & CHẠY MÔ PHỎNG
 // =========================================================
-let beamChartObj = null, trainChartObj = null, rateChartObj = null;
 let currentW = null;
 
 function renderBeamPattern(Nt, beamIdx) {
@@ -551,97 +678,244 @@ function renderBeamPattern(Nt, beamIdx) {
   const anglesDeg = [];
   const gainsDb = [];
   for (let deg = -90; deg <= 90; deg += 1) {
-    anglesDeg.push(deg);
+    anglesDeg.push(deg + "°");
     const sv = steeringVector(Nt, (deg * Math.PI) / 180.0);
     const g = beamGain(currentW[beamIdx], sv);
     gainsDb.push(10 * Math.log10(Math.max(g, 1e-5)));
   }
 
-  if (beamChartObj) beamChartObj.destroy();
-  beamChartObj = new Chart(document.getElementById("beamChart"), {
-    type: "line",
-    data: {
-      labels: anglesDeg,
-      datasets: [{
-        label: `Độ lợi búp sóng Beam #${beamIdx} (dB)`, data: gainsDb, borderColor: "#1d4ed8", backgroundColor: "rgba(29, 78, 216, 0.12)", borderWidth: 2, pointRadius: 0, fill: true }] }, options: { responsive: true, maintainAspectRatio: false, scales: { x: { title: { display: true, text: "Góc phương vị (độ)" }, ticks: { maxTicksLimit: 10 } }, y: { title: { display: true, text: "Độ lợi (dB)" }, min: -35, max: 2 } } } }); }  function computeMultiUESumRate(H_K, W, beams, snrDb, K) { const P_k = Math.pow(10, snrDb / 10.0) / K; let sumRate = 0.0; for (let k = 0; k < K; k++) { const sig = P_k * beamGain(W[beams[k]], H_K[k]); let interf = 0.0; for (let j = 0; j < K; j++) { if (j !== k) interf += P_k * beamGain(W[beams[j]], H_K[k]); } sumRate += Math.log2(1.0 + sig / (interf + 1.0)); } return sumRate; }  async function runSimulation() { const btn = document.getElementById("runBtn"); const status = document.getElementById("statusText"); const prog = document.getElementById("progressFill"); btn.disabled = true;  const Nt = parseInt(document.getElementById("ntSelect").value); const M = Nt; const K = parseInt(document.getElementById("kSelect").value); const L = parseInt(document.getElementById("lSelect").value); const numSamples = parseInt(document.getElementById("samplesSelect").value); const epochs = parseInt(document.getElementById("epochsSelect").value);  const slider = document.getElementById("beamSlider"); slider.max = M - 1; if (parseInt(slider.value) >= M) slider.value = Math.floor(M / 4); document.getElementById("beamIdxLabel").textContent = `#${slider.value}`;
-  currentW = createDFTCodebook(Nt, M);
-  renderBeamPattern(Nt, parseInt(slider.value));
+  drawLineChart("beamChart", {
+    labels: anglesDeg,
+    xTitle: "Góc phương vị (độ)",
+    yTitle: "Độ lợi (dB)",
+    yMin: -35,
+    yMax: 2,
+    yDecimals: 0,
+    datasets: [{
+      label: `Độ lợi búp sóng Beam #${beamIdx} (dB)`,
+      data: gainsDb,
+      color: "#1d4ed8",
+      fill: "rgba(29, 78, 216, 0.12)",
+      width: 2
+    }]
+  });
+}
 
-  status.textContent = `Đang sinh ${numSamples} mẫu kênh CSI & nhãn tìm kiếm vét cạn...`;
-  prog.style.width = "10%";
-  await new Promise(r => setTimeout(r, 20));
-
-  const nTrain = Math.floor(numSamples * 0.8);
-  const nTest = numSamples - nTrain;
-  const X_tr = [], y_tr = [], X_te = [], y_te = [];
-
-  for (let i = 0; i < numSamples; i++) {
-    const h = generateChannel(Nt, L);
-    const bestBeam = exhaustiveSearch(currentW, h);
-    const snrDb = Math.random() * 22.0 - 2.0;
-    const nStd = Math.sqrt(Math.pow(10, -snrDb / 10.0) / 2.0);
-    const hEst = { re: new Float64Array(Nt), im: new Float64Array(Nt) };
-    for (let n = 0; n < Nt; n++) {
-      hEst.re[n] = h.re[n] + nStd * randn();
-      hEst.im[n] = h.im[n] + nStd * randn();
+function computeMultiUESumRate(H_K, W, beams, snrDb, K) {
+  const P_k = Math.pow(10, snrDb / 10.0) / K;
+  let sumRate = 0.0;
+  for (let k = 0; k < K; k++) {
+    const sig = P_k * beamGain(W[beams[k]], H_K[k]);
+    let interf = 0.0;
+    for (let j = 0; j < K; j++) {
+      if (j !== k) interf += P_k * beamGain(W[beams[j]], H_K[k]);
     }
-    const feat = extractFeatures(hEst, Nt);
-    if (i < nTrain) { X_tr.push(feat); y_tr.push(bestBeam); }
-    else { X_te.push(feat); y_te.push(bestBeam); }
+    sumRate += Math.log2(1.0 + sig / (interf + 1.0));
   }
+  return sumRate;
+}
 
-  // Huấn luyện DNN
-  const model = new BeamDNN(2 * Nt, M);
-  const lossHist = [], accHist = [], epLabels = [];
-  const batchSize = 64;
+async function runSimulation() {
+  const btn = document.getElementById("runBtn");
+  const status = document.getElementById("statusText");
+  const prog = document.getElementById("progressFill");
 
-  for (let ep = 1; ep <= epochs; ep++) {
-    const perm = Array.from({ length: nTrain }, (_, i) => i);
-    for (let i = nTrain - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [perm[i], perm[j]] = [perm[j], perm[i]];
-    }
-    let epLoss = 0.0, batches = 0;
-    for (let start = 0; start < nTrain; start += batchSize) {
-      const bx = [], by = [];
-      for (let idx = start; idx < Math.min(start + batchSize, nTrain); idx++) {
-        bx.push(X_tr[perm[idx]]);
-        by.push(y_tr[perm[idx]]);
+  try {
+    btn.disabled = true;
+    const Nt = parseInt(document.getElementById("ntSelect").value);
+    const M = Nt;
+    const K = parseInt(document.getElementById("kSelect").value);
+    const L = parseInt(document.getElementById("lSelect").value);
+    const numSamples = parseInt(document.getElementById("samplesSelect").value);
+    const epochs = parseInt(document.getElementById("epochsSelect").value);
+
+    const slider = document.getElementById("beamSlider");
+    slider.max = M - 1;
+    if (parseInt(slider.value) >= M) slider.value = Math.floor(M / 4);
+    document.getElementById("beamIdxLabel").textContent = `#${slider.value}`;
+    currentW = createDFTCodebook(Nt, M);
+    renderBeamPattern(Nt, parseInt(slider.value));
+
+    status.textContent = `Đang sinh ${numSamples} mẫu kênh CSI & nhãn tìm kiếm vét cạn...`;
+    prog.style.width = "8%";
+    await new Promise(r => setTimeout(r, 20));
+
+    const nTrain = Math.floor(numSamples * 0.8);
+    const nTest = numSamples - nTrain;
+    const X_tr = [], y_tr = [], X_te = [], y_te = [];
+
+    for (let i = 0; i < numSamples; i++) {
+      const h = generateChannel(Nt, L);
+      const bestBeam = exhaustiveSearch(currentW, h);
+      const snrDb = Math.random() * 22.0 - 2.0;
+      const nStd = Math.sqrt(Math.pow(10, -snrDb / 10.0) / 2.0);
+      const hEst = { re: new Float64Array(Nt), im: new Float64Array(Nt) };
+      for (let n = 0; n < Nt; n++) {
+        hEst.re[n] = h.re[n] + nStd * randn();
+        hEst.im[n] = h.im[n] + nStd * randn();
       }
-      epLoss += model.trainBatch(bx, by, 0.004);
-      batches++;
+      const feat = extractFeatures(hEst, Nt);
+      if (i < nTrain) { X_tr.push(feat); y_tr.push(bestBeam); }
+      else { X_te.push(feat); y_te.push(bestBeam); }
     }
 
-    let correct1 = 0;
+    const model = new BeamDNN(2 * Nt, M);
+    const lossHist = [], accHist = [], epLabels = [];
+    const batchSize = 64;
+
+    for (let ep = 1; ep <= epochs; ep++) {
+      const perm = Array.from({ length: nTrain }, (_, i) => i);
+      for (let i = nTrain - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [perm[i], perm[j]] = [perm[j], perm[i]];
+      }
+      let epLoss = 0.0, batches = 0;
+      for (let start = 0; start < nTrain; start += batchSize) {
+        const bx = [], by = [];
+        for (let idx = start; idx < Math.min(start + batchSize, nTrain); idx++) {
+          bx.push(X_tr[perm[idx]]);
+          by.push(y_tr[perm[idx]]);
+        }
+        epLoss += model.trainBatch(bx, by, 0.004);
+        batches++;
+      }
+
+      let correct1 = 0;
+      for (let i = 0; i < nTest; i++) {
+        if (model.predictTopK(X_te[i], 1)[0] === y_te[i]) correct1++;
+      }
+      epLabels.push(ep);
+      lossHist.push(epLoss / batches);
+      accHist.push((correct1 / nTest) * 100);
+
+      if (ep % 2 === 0 || ep === epochs) {
+        status.textContent = `Đang huấn luyện AI: Epoch ${ep}/${epochs} — Top-1 Acc: ${accHist[accHist.length - 1].toFixed(1)}%`;
+        prog.style.width = `${10 + Math.round((ep / epochs) * 75)}%`;
+        await new Promise(r => setTimeout(r, 0));
+      }
+    }
+
+    const maxLoss = Math.max(...lossHist, 1.0);
+    drawLineChart("trainChart", {
+      labels: epLabels,
+      xTitle: "Epoch",
+      yTitle: "Cross-Entropy Loss",
+      yMin: 0,
+      yMax: Math.ceil(maxLoss * 10) / 10,
+      yDecimals: 1,
+      y2Title: "Accuracy (%)",
+      y2Min: 0,
+      y2Max: 100,
+      datasets: [
+        { label: "Training Loss", data: lossHist, color: "#dc2626", axis: "left", width: 2 },
+        { label: "Validation Top-1 Accuracy (%)", data: accHist, color: "#059669", axis: "right", width: 2 }
+      ]
+    });
+
+    let top1 = 0, top3 = 0;
     for (let i = 0; i < nTest; i++) {
-      if (model.predictTopK(X_te[i], 1)[0] === y_te[i]) correct1++;
+      const preds = model.predictTopK(X_te[i], 3);
+      if (preds[0] === y_te[i]) top1++;
+      if (preds.includes(y_te[i])) top3++;
     }
-    epLabels.push(ep);
-    lossHist.push((epLoss / batches).toFixed(3));
-    accHist.push(((correct1 / nTest) * 100).toFixed(1));
+    document.getElementById("kpiTop1").textContent = `${((top1 / nTest) * 100).toFixed(1)} %`;
+    document.getElementById("kpiTop3").textContent = `${((top3 / nTest) * 100).toFixed(1)} %`;
 
-    if (ep % 2 === 0 || ep === epochs) {
-      status.textContent = `Đang huấn luyện AI: Epoch ${ep}/${epochs} — Top-1 Acc:${accHist[accHist.length - 1]}%`;
-      prog.style.width = `${10 + Math.round((ep / epochs) * 75)}\%`; await new Promise(r => setTimeout(r, 0)); } }  // Vẽ biểu đồ huấn luyện if (trainChartObj) trainChartObj.destroy(); trainChartObj = new Chart(document.getElementById("trainChart"), { type: "line", data: { labels: epLabels, datasets: [ { label: "Training Loss", data: lossHist, borderColor: "#dc2626", yAxisID: "y", pointRadius: 0 }, { label: "Validation Top-1 Accuracy (\%)", data: accHist, borderColor: "#059669", yAxisID: "y1", pointRadius: 0 } ] }, options: { responsive: true, maintainAspectRatio: false, scales: { x: { title: { display: true, text: "Epoch" } }, y: { type: "linear", position: "left", title: { display: true, text: "Cross-Entropy Loss" } }, y1: { type: "linear", position: "right", min: 0, max: 100, grid: { drawOnChartArea: false }, title: { display: true, text: "Accuracy (\%)" } } } } });  // Đánh giá Top-1 & Top-3 trên Test set let top1 = 0, top3 = 0; for (let i = 0; i < nTest; i++) { const preds = model.predictTopK(X_te[i], 3); if (preds[0] === y_te[i]) top1++; if (preds.includes(y_te[i])) top3++; } document.getElementById("kpiTop1").textContent = `${((top1 / nTest) * 100).toFixed(1)} %`;
-  document.getElementById("kpiTop3").textContent = `${((top3 / nTest) * 100).toFixed(1)} \%`;  // Đo thời gian suy luận 1.000 mẫu const benchH = Array.from({ length: 1000 }, () => generateChannel(Nt, L)); const benchX = benchH.map(h => extractFeatures(h, Nt)); const t0Exh = performance.now(); for (let i = 0; i < 1000; i++) exhaustiveSearch(currentW, benchH[i]); const timeExh = performance.now() - t0Exh;  const t0AI = performance.now(); for (let i = 0; i < 1000; i++) model.predictTopK(benchX[i], 1); const timeAI = performance.now() - t0AI;  document.getElementById("kpiSpeedup").textContent = `${(timeExh / Math.max(timeAI, 0.01)).toFixed(1)}x nhanh hơn`;
-  document.getElementById("kpiTimeSub").textContent = `Vét cạn: ${timeExh.toFixed(1)} ms | AI: ${timeAI.toFixed(1)} ms`;  // So sánh Sum-rate theo SNR status.textContent = "Đang mô phỏng kịch bản đa người dùng theo SNR..."; await new Promise(r => setTimeout(r, 10));  const snrList = [-10, -5, 0, 5, 10, 15, 20]; const rateExh = [], rateAI = [], rateRnd = []; const tbody = document.getElementById("resultTableBody"); tbody.innerHTML = ""; const nTrials = 220;  for (const snrDb of snrList) { const nStd = Math.sqrt(Math.pow(10, -snrDb / 10.0) / 2.0); let sExh = 0, sAI = 0, sRnd = 0; for (let tr = 0; tr < nTrials; tr++) { const H_K = [], bExh = [], bAI = [], bRnd = []; for (let k = 0; k < K; k++) { const hk = generateChannel(Nt, L); H_K.push(hk); bExh.push(exhaustiveSearch(currentW, hk));  const hEst = { re: new Float64Array(Nt), im: new Float64Array(Nt) }; for (let n = 0; n < Nt; n++) { hEst.re[n] = hk.re[n] + nStd * randn(); hEst.im[n] = hk.im[n] + nStd * randn(); } bAI.push(model.predictTopK(extractFeatures(hEst, Nt), 1)[0]); bRnd.push(Math.floor(Math.random() * M)); } sExh += computeMultiUESumRate(H_K, currentW, bExh, snrDb, K); sAI += computeMultiUESumRate(H_K, currentW, bAI, snrDb, K); sRnd += computeMultiUESumRate(H_K, currentW, bRnd, snrDb, K); } const avgExh = sExh / nTrials; const avgAI = sAI / nTrials; const avgRnd = sRnd / nTrials; rateExh.push(avgExh.toFixed(2)); rateAI.push(avgAI.toFixed(2)); rateRnd.push(avgRnd.toFixed(2));  const pct = ((avgAI / avgExh) * 100).toFixed(1); if (snrDb === 10) { document.getElementById("kpiRateRatio").textContent = `${pct} %`;
-      document.getElementById("kpiRateSub").textContent = `AI: ${avgAI.toFixed(2)} vs Vét cạn: ${avgExh.toFixed(2)} bps/Hz`;
+    const benchH = Array.from({ length: 1000 }, () => generateChannel(Nt, L));
+    const benchX = benchH.map(h => extractFeatures(h, Nt));
+    const t0Exh = performance.now();
+    for (let i = 0; i < 1000; i++) exhaustiveSearch(currentW, benchH[i]);
+    const timeExh = performance.now() - t0Exh;
+
+    const t0AI = performance.now();
+    for (let i = 0; i < 1000; i++) model.predictTopK(benchX[i], 1);
+    const timeAI = performance.now() - t0AI;
+
+    document.getElementById("kpiSpeedup").textContent = `${(timeExh / Math.max(timeAI, 0.05)).toFixed(1)}x nhanh hơn`;
+    document.getElementById("kpiTimeSub").textContent = `Vét cạn: ${timeExh.toFixed(1)} ms | AI: ${timeAI.toFixed(1)} ms`;
+
+    status.textContent = "Đang mô phỏng kịch bản đa người dùng theo SNR...";
+    await new Promise(r => setTimeout(r, 15));
+
+    const snrList = [-10, -5, 0, 5, 10, 15, 20];
+    const rateExh = [], rateAI = [], rateRnd = [];
+    const tbody = document.getElementById("resultTableBody");
+    tbody.innerHTML = "";
+    const nTrials = 200;
+
+    for (const snrDb of snrList) {
+      const nStd = Math.sqrt(Math.pow(10, -snrDb / 10.0) / 2.0);
+      let sExh = 0, sAI = 0, sRnd = 0;
+      for (let tr = 0; tr < nTrials; tr++) {
+        const H_K = [], bExh = [], bAI = [], bRnd = [];
+        for (let k = 0; k < K; k++) {
+          const hk = generateChannel(Nt, L);
+          H_K.push(hk);
+          bExh.push(exhaustiveSearch(currentW, hk));
+
+          const hEst = { re: new Float64Array(Nt), im: new Float64Array(Nt) };
+          for (let n = 0; n < Nt; n++) {
+            hEst.re[n] = hk.re[n] + nStd * randn();
+            hEst.im[n] = hk.im[n] + nStd * randn();
+          }
+          bAI.push(model.predictTopK(extractFeatures(hEst, Nt), 1)[0]);
+          bRnd.push(Math.floor(Math.random() * M));
+        }
+        sExh += computeMultiUESumRate(H_K, currentW, bExh, snrDb, K);
+        sAI += computeMultiUESumRate(H_K, currentW, bAI, snrDb, K);
+        sRnd += computeMultiUESumRate(H_K, currentW, bRnd, snrDb, K);
+      }
+      const avgExh = sExh / nTrials;
+      const avgAI = sAI / nTrials;
+      const avgRnd = sRnd / nTrials;
+      rateExh.push(avgExh);
+      rateAI.push(avgAI);
+      rateRnd.push(avgRnd);
+
+      const pct = ((avgAI / avgExh) * 100).toFixed(1);
+      if (snrDb === 10) {
+        document.getElementById("kpiRateRatio").textContent = `${pct} %`;
+        document.getElementById("kpiRateSub").textContent = `AI: ${avgAI.toFixed(2)} vs Vét cạn: ${avgExh.toFixed(2)} bps/Hz`;
+      }
+
+      tbody.innerHTML += `<tr>
+        <td><b>${snrDb} dB</b></td>
+        <td>${avgExh.toFixed(2)}</td>
+        <td style="color:#1d4ed8; font-weight:600;">${avgAI.toFixed(2)}</td>
+        <td>${avgRnd.toFixed(2)}</td>
+        <td><b>${pct}%</b></td>
+      </tr>`;
     }
 
-    tbody.innerHTML += `<tr>
-      <td><b>${snrDb} dB</b></td>
-      <td>${avgExh.toFixed(2)}</td>
-      <td style="color:#1d4ed8; font-weight:600;">${avgAI.toFixed(2)}</td>
-      <td>${avgRnd.toFixed(2)}</td>
-      <td><b>${pct}%</b></td>
-    </tr>`;
+    const maxRate = Math.ceil(Math.max(...rateExh) / 5) * 5;
+    drawLineChart("rateChart", {
+      labels: snrList.map(s => `${s} dB`),
+      xTitle: "SNR (dB)",
+      yTitle: "Sum-rate (bps/Hz)",
+      yMin: 0,
+      yMax: Math.max(maxRate, 10),
+      yDecimals: 0,
+      datasets: [
+        { label: "Vét cạn", data: rateExh, color: "#0f172a", width: 2.2, points: true },
+        { label: "AI (DNN)", data: rateAI, color: "#dc2626", width: 2.2, dash: [6, 4], points: true },
+        { label: "Ngẫu nhiên", data: rateRnd, color: "#64748b", width: 1.6, dash: [2, 3], points: true }
+      ]
+    });
+
+    prog.style.width = "100%";
+    status.textContent = "Hoàn tất mô phỏng! Đổi số anten (32/64/128) hoặc kéo thanh trượt Beam Index để khảo sát thêm.";
+  } catch (err) {
+    status.style.color = "#dc2626";
+    status.textContent = "Lỗi chạy mô phỏng: " + err.message;
+  } finally {
+    btn.disabled = false;
   }
+}
 
-  if (rateChartObj) rateChartObj.destroy();
-  rateChartObj = new Chart(document.getElementById("rateChart"), {
-    type: "line",
-    data: {
-      labels: snrList.map(s => `${s} dB`), datasets: [ { label: "Tìm kiếm vét cạn (Tối ưu)", data: rateExh, borderColor: "#0f172a", borderWidth: 2 }, { label: "AI Beam Selection (DNN)", data: rateAI, borderColor: "#dc2626", borderDash: [6, 4], borderWidth: 2.5 }, { label: "Chọn beam ngẫu nhiên", data: rateRnd, borderColor: "#64748b", borderDash: [2, 3], borderWidth: 1.5 } ] }, options: { responsive: true, maintainAspectRatio: false, scales: { x: { title: { display: true, text: "SNR (dB)" } }, y: { title: { display: true, text: "Sum-rate (bps/Hz)" } } } } });  prog.style.width = "100\%"; status.textContent = "Hoàn tất mô phỏng! Bạn có thể đổi số anten (32/64/128) hoặc kéo thanh trượt Beam Index để khảo sát thêm."; btn.disabled = false; }  document.getElementById("beamSlider").addEventListener("input", (e) => { const Nt = parseInt(document.getElementById("ntSelect").value); const idx = parseInt(e.target.value); document.getElementById("beamIdxLabel").textContent = `#${idx}`;
+document.getElementById("beamSlider").addEventListener("input", (e) => {
+  const Nt = parseInt(document.getElementById("ntSelect").value);
+  const idx = parseInt(e.target.value);
+  document.getElementById("beamIdxLabel").textContent = `#${idx}`;
   renderBeamPattern(Nt, idx);
 });
 
