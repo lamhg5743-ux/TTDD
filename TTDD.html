@@ -102,7 +102,7 @@
     }
     .kpi-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       gap: 14px;
       margin-bottom: 20px;
     }
@@ -113,14 +113,14 @@
       padding: 15px 18px;
     }
     .kpi-box .kpi-title { font-size: 0.82rem; color: var(--muted); font-weight: 600; }
-    .kpi-box .kpi-val { font-size: 1.5rem; font-weight: 700; color: var(--primary); margin: 6px 0 2px; }
+    .kpi-box .kpi-val { font-size: 1.45rem; font-weight: 700; color: var(--primary); margin: 6px 0 2px; }
     .kpi-box .kpi-sub { font-size: 0.8rem; color: #475569; }
     .charts-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
       gap: 20px;
     }
-    .chart-box { position: relative; height: 310px; width: 100%; }
+    .chart-box { position: relative; height: 300px; width: 100%; }
     .chart-box canvas { width: 100%; height: 100%; display: block; }
     .beam-slider-row {
       display: flex;
@@ -133,12 +133,12 @@
     table.summary-table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 0.9rem;
+      font-size: 0.88rem;
       margin-top: 8px;
     }
     table.summary-table th, table.summary-table td {
       border: 1px solid var(--border);
-      padding: 9px 12px;
+      padding: 8px 10px;
       text-align: center;
     }
     table.summary-table th { background: #f1f5f9; color: #0f172a; }
@@ -206,29 +206,31 @@
     </div>
   </div>
 
+  <!-- 4 CHỈ SỐ KPI ĐẦY ĐỦ SINR, SUM-RATE, ACCURACY, OVERHEAD -->
   <div class="kpi-grid">
     <div class="kpi-box">
-      <div class="kpi-title">Độ chính xác AI (Top-1 Accuracy)</div>
+      <div class="kpi-title">Độ chính xác AI (Beam Selection)</div>
       <div class="kpi-val" id="kpiTop1">-- %</div>
-      <div class="kpi-sub">Dự đoán đúng ngay beam tối ưu nhất</div>
+      <div class="kpi-sub" id="kpiTop3Sub">Top-1: -- % | Top-3: -- %</div>
     </div>
     <div class="kpi-box">
-      <div class="kpi-title">Độ chính xác AI (Top-3 Accuracy)</div>
-      <div class="kpi-val" id="kpiTop3">-- %</div>
-      <div class="kpi-sub">Beam tối ưu nằm trong 3 gợi ý đầu</div>
+      <div class="kpi-title">SINR trung bình (tại SNR = 10 dB)</div>
+      <div class="kpi-val" id="kpiSinr">-- dB</div>
+      <div class="kpi-sub" id="kpiSinrSub">AI: -- dB vs Vét cạn: -- dB</div>
     </div>
     <div class="kpi-box">
       <div class="kpi-title">Hiệu suất Sum-rate (tại SNR = 10 dB)</div>
       <div class="kpi-val" id="kpiRateRatio">-- %</div>
-      <div class="kpi-sub" id="kpiRateSub">So với thuật toán tìm kiếm vét cạn</div>
+      <div class="kpi-sub" id="kpiRateSub">AI: -- vs Vét cạn: -- bps/Hz</div>
     </div>
     <div class="kpi-box">
-      <div class="kpi-title">Tốc độ xử lý 1.000 mẫu kênh</div>
-      <div class="kpi-val" id="kpiSpeedup">-- ms</div>
-      <div class="kpi-sub" id="kpiTimeSub">Vét cạn: -- ms | AI: -- ms</div>
+      <div class="kpi-title">Giảm chi phí quét chùm tia (Overhead)</div>
+      <div class="kpi-val" id="kpiOverhead">Giảm 64x</div>
+      <div class="kpi-sub" id="kpiOverheadSub">AI: 1 lần quét vs Vét cạn: 64 beams</div>
     </div>
   </div>
 
+  <!-- 4 ĐỒ THỊ ĐẦY ĐỦ -->
   <div class="charts-grid">
     <div class="card">
       <h2>2. Đồ thị bức xạ DFT Codebook (Beam Pattern)</h2>
@@ -246,25 +248,33 @@
     </div>
 
     <div class="card">
-      <h2>4. So sánh Sum-rate: AI vs. Tìm kiếm vét cạn</h2>
+      <h2>4. So sánh SINR trung bình (dB): AI vs. Vét cạn</h2>
+      <div class="chart-box"><canvas id="sinrChart"></canvas></div>
+    </div>
+
+    <div class="card">
+      <h2>5. So sánh Sum-rate (bps/Hz): AI vs. Vét cạn</h2>
       <div class="chart-box"><canvas id="rateChart"></canvas></div>
     </div>
   </div>
 
+  <!-- BẢNG SỐ LIỆU CHI TIẾT CẢ SINR VÀ SUM-RATE -->
   <div class="card">
-    <h2>5. Bảng tổng hợp kết quả định lượng theo từng mức SNR</h2>
+    <h2>6. Bảng tổng hợp kết quả định lượng SINR và Sum-rate theo SNR</h2>
     <table class="summary-table">
       <thead>
         <tr>
           <th>SNR (dB)</th>
+          <th>Vét cạn - SINR (dB)</th>
+          <th>AI (DNN) - SINR (dB)</th>
           <th>Vét cạn - Sum-rate (bps/Hz)</th>
           <th>AI (DNN) - Sum-rate (bps/Hz)</th>
-          <th>Chọn ngẫu nhiên (bps/Hz)</th>
-          <th>Tỷ lệ đạt chuẩn AI / Vét cạn (%)</th>
+          <th>Ngẫu nhiên - Sum-rate (bps/Hz)</th>
+          <th>Hiệu suất AI / Vét cạn (%)</th>
         </tr>
       </thead>
       <tbody id="resultTableBody">
-        <tr><td colspan="5" style="color:#64748b;">Chưa có dữ liệu mô phỏng</td></tr>
+        <tr><td colspan="7" style="color:#64748b;">Chưa có dữ liệu mô phỏng</td></tr>
       </tbody>
     </table>
   </div>
@@ -276,14 +286,14 @@
 
 <script>
 // =========================================================
-// BỘ VẼ BIỂU ĐỒ NỘI BỘ HTML5 CANVAS (KHÔNG CẦN THƯ VIỆN NGOÀI)
+// BỘ VẼ BIỂU ĐỒ HTML5 CANVAS
 // =========================================================
 function drawLineChart(canvasId, cfg) {
   const canvas = document.getElementById(canvasId);
   if (!canvas) return;
   const parent = canvas.parentElement;
-  const width = Math.max(parent.clientWidth || 360, 280);
-  const height = Math.max(parent.clientHeight || 300, 240);
+  const width = Math.max(parent.clientWidth || 420, 300);
+  const height = Math.max(parent.clientHeight || 290, 240);
   const dpr = window.devicePixelRatio || 1;
   canvas.width = width * dpr;
   canvas.height = height * dpr;
@@ -297,7 +307,6 @@ function drawLineChart(canvasId, cfg) {
   const plotW = width - pad.left - pad.right;
   const plotH = height - pad.top - pad.bottom;
 
-  // Khung lưới & trục tọa độ
   ctx.strokeStyle = "#e2e8f0";
   ctx.lineWidth = 1;
   const yTicks = 5;
@@ -323,7 +332,6 @@ function drawLineChart(canvasId, cfg) {
     }
   }
 
-  // Nhãn trục X
   const nPts = cfg.labels.length;
   const stepX = Math.max(1, Math.floor(nPts / 6));
   ctx.fillStyle = "#475569";
@@ -334,7 +342,6 @@ function drawLineChart(canvasId, cfg) {
     ctx.fillText(String(cfg.labels[i]), x, pad.top + plotH + 7);
   }
 
-  // Tên trục X & Y
   ctx.fillStyle = "#0f172a";
   ctx.font = "bold 11.5px Segoe UI, sans-serif";
   ctx.textAlign = "center";
@@ -355,7 +362,6 @@ function drawLineChart(canvasId, cfg) {
     ctx.restore();
   }
 
-  // Vẽ các đường dữ liệu
   cfg.datasets.forEach(ds => {
     const minV = ds.axis === "right" ? cfg.y2Min : cfg.yMin;
     const maxV = ds.axis === "right" ? cfg.y2Max : cfg.yMax;
@@ -397,7 +403,6 @@ function drawLineChart(canvasId, cfg) {
     ctx.restore();
   });
 
-  // Chú thích (Legend) phía trên
   let legX = pad.left;
   ctx.font = "11px Segoe UI, sans-serif";
   ctx.textAlign = "left";
@@ -412,7 +417,7 @@ function drawLineChart(canvasId, cfg) {
 }
 
 // =========================================================
-// 1. TOÁN HỌC MẢNG ANTEN, DFT CODEBOOK & KÊNH ĐA ĐƯỜNG
+// TOÁN HỌC MẢNG ANTEN, DFT CODEBOOK & KÊNH ĐA ĐƯỜNG
 // =========================================================
 function randn() {
   let u = 0, v = 0;
@@ -510,7 +515,7 @@ function exhaustiveSearch(W, h) {
 }
 
 // =========================================================
-// 2. MẠNG NƠ-RON SÂU (DNN) & BỘ TỐI ƯU ADAM
+// MẠNG NƠ-RON SÂU (DNN) & BỘ TỐI ƯU ADAM
 // =========================================================
 class BeamDNN {
   constructor(inDim, outDim) {
@@ -669,7 +674,7 @@ class BeamDNN {
 }
 
 // =========================================================
-// 3. QUẢN LÝ BIỂU ĐỒ & CHẠY MÔ PHỎNG
+// QUẢN LÝ BIỂU ĐỒ & CHẠY MÔ PHỎNG
 // =========================================================
 let currentW = null;
 
@@ -701,18 +706,21 @@ function renderBeamPattern(Nt, beamIdx) {
   });
 }
 
-function computeMultiUESumRate(H_K, W, beams, snrDb, K) {
+function computeMultiUEMetrics(H_K, W, beams, snrDb, K) {
   const P_k = Math.pow(10, snrDb / 10.0) / K;
   let sumRate = 0.0;
+  let sumSinrDb = 0.0;
   for (let k = 0; k < K; k++) {
     const sig = P_k * beamGain(W[beams[k]], H_K[k]);
     let interf = 0.0;
     for (let j = 0; j < K; j++) {
       if (j !== k) interf += P_k * beamGain(W[beams[j]], H_K[k]);
     }
-    sumRate += Math.log2(1.0 + sig / (interf + 1.0));
+    const sinrLinear = sig / (interf + 1.0);
+    sumSinrDb += 10.0 * Math.log10(Math.max(sinrLinear, 1e-6));
+    sumRate += Math.log2(1.0 + sinrLinear);
   }
-  return sumRate;
+  return { sumRate, avgSinrDb: sumSinrDb / K };
 }
 
 async function runSimulation() {
@@ -735,6 +743,9 @@ async function runSimulation() {
     document.getElementById("beamIdxLabel").textContent = `#${slider.value}`;
     currentW = createDFTCodebook(Nt, M);
     renderBeamPattern(Nt, parseInt(slider.value));
+
+    document.getElementById("kpiOverhead").textContent = `Giảm ${M}x`;
+    document.getElementById("kpiOverheadSub").textContent = `AI: 1 lần suy luận vs Vét cạn: ${M} beams`;
 
     status.textContent = `Đang sinh ${numSamples} mẫu kênh CSI & nhãn tìm kiếm vét cạn...`;
     prog.style.width = "8%";
@@ -818,33 +829,24 @@ async function runSimulation() {
       if (preds[0] === y_te[i]) top1++;
       if (preds.includes(y_te[i])) top3++;
     }
-    document.getElementById("kpiTop1").textContent = `${((top1 / nTest) * 100).toFixed(1)} %`;
-    document.getElementById("kpiTop3").textContent = `${((top3 / nTest) * 100).toFixed(1)} %`;
+    const top1Pct = ((top1 / nTest) * 100).toFixed(1);
+    const top3Pct = ((top3 / nTest) * 100).toFixed(1);
+    document.getElementById("kpiTop1").textContent = `${top1Pct} %`;
+    document.getElementById("kpiTop3Sub").textContent = `Top-1: ${top1Pct}% | Top-3: ${top3Pct}%`;
 
-    const benchH = Array.from({ length: 1000 }, () => generateChannel(Nt, L));
-    const benchX = benchH.map(h => extractFeatures(h, Nt));
-    const t0Exh = performance.now();
-    for (let i = 0; i < 1000; i++) exhaustiveSearch(currentW, benchH[i]);
-    const timeExh = performance.now() - t0Exh;
-
-    const t0AI = performance.now();
-    for (let i = 0; i < 1000; i++) model.predictTopK(benchX[i], 1);
-    const timeAI = performance.now() - t0AI;
-
-    document.getElementById("kpiSpeedup").textContent = `${(timeExh / Math.max(timeAI, 0.05)).toFixed(1)}x nhanh hơn`;
-    document.getElementById("kpiTimeSub").textContent = `Vét cạn: ${timeExh.toFixed(1)} ms | AI: ${timeAI.toFixed(1)} ms`;
-
-    status.textContent = "Đang mô phỏng kịch bản đa người dùng theo SNR...";
+    status.textContent = "Đang đánh giá SINR & Sum-rate đa người dùng theo SNR...";
     await new Promise(r => setTimeout(r, 15));
 
     const snrList = [-10, -5, 0, 5, 10, 15, 20];
     const rateExh = [], rateAI = [], rateRnd = [];
+    const sinrExh = [], sinrAI = [], sinrRnd = [];
     const tbody = document.getElementById("resultTableBody");
     tbody.innerHTML = "";
     const nTrials = 200;
 
     for (const snrDb of snrList) {
       const nStd = Math.sqrt(Math.pow(10, -snrDb / 10.0) / 2.0);
+      let rExh = 0, rAI = 0, rRnd = 0;
       let sExh = 0, sAI = 0, sRnd = 0;
       for (let tr = 0; tr < nTrials; tr++) {
         const H_K = [], bExh = [], bAI = [], bRnd = [];
@@ -861,31 +863,57 @@ async function runSimulation() {
           bAI.push(model.predictTopK(extractFeatures(hEst, Nt), 1)[0]);
           bRnd.push(Math.floor(Math.random() * M));
         }
-        sExh += computeMultiUESumRate(H_K, currentW, bExh, snrDb, K);
-        sAI += computeMultiUESumRate(H_K, currentW, bAI, snrDb, K);
-        sRnd += computeMultiUESumRate(H_K, currentW, bRnd, snrDb, K);
-      }
-      const avgExh = sExh / nTrials;
-      const avgAI = sAI / nTrials;
-      const avgRnd = sRnd / nTrials;
-      rateExh.push(avgExh);
-      rateAI.push(avgAI);
-      rateRnd.push(avgRnd);
+        const mExh = computeMultiUEMetrics(H_K, currentW, bExh, snrDb, K);
+        const mAI = computeMultiUEMetrics(H_K, currentW, bAI, snrDb, K);
+        const mRnd = computeMultiUEMetrics(H_K, currentW, bRnd, snrDb, K);
 
-      const pct = ((avgAI / avgExh) * 100).toFixed(1);
+        rExh += mExh.sumRate; sExh += mExh.avgSinrDb;
+        rAI += mAI.sumRate;   sAI += mAI.avgSinrDb;
+        rRnd += mRnd.sumRate; sRnd += mRnd.avgSinrDb;
+      }
+
+      const avgRateExh = rExh / nTrials, avgSinrExh = sExh / nTrials;
+      const avgRateAI = rAI / nTrials,   avgSinrAI = sAI / nTrials;
+      const avgRateRnd = rRnd / nTrials, avgSinrRnd = sRnd / nTrials;
+
+      rateExh.push(avgRateExh); sinrExh.push(avgSinrExh);
+      rateAI.push(avgRateAI);   sinrAI.push(avgSinrAI);
+      rateRnd.push(avgRateRnd); sinrRnd.push(avgSinrRnd);
+
+      const pct = ((avgRateAI / avgRateExh) * 100).toFixed(1);
       if (snrDb === 10) {
+        document.getElementById("kpiSinr").textContent = `${avgSinrAI.toFixed(1)} dB`;
+        document.getElementById("kpiSinrSub").textContent = `AI: ${avgSinrAI.toFixed(1)} dB vs Vét cạn: ${avgSinrExh.toFixed(1)} dB`;
         document.getElementById("kpiRateRatio").textContent = `${pct} %`;
-        document.getElementById("kpiRateSub").textContent = `AI: ${avgAI.toFixed(2)} vs Vét cạn: ${avgExh.toFixed(2)} bps/Hz`;
+        document.getElementById("kpiRateSub").textContent = `AI: ${avgRateAI.toFixed(2)} vs Vét cạn: ${avgRateExh.toFixed(2)} bps/Hz`;
       }
 
       tbody.innerHTML += `<tr>
         <td><b>${snrDb} dB</b></td>
-        <td>${avgExh.toFixed(2)}</td>
-        <td style="color:#1d4ed8; font-weight:600;">${avgAI.toFixed(2)}</td>
-        <td>${avgRnd.toFixed(2)}</td>
+        <td>${avgSinrExh.toFixed(2)}</td>
+        <td style="color:#0f766e; font-weight:600;">${avgSinrAI.toFixed(2)}</td>
+        <td>${avgRateExh.toFixed(2)}</td>
+        <td style="color:#1d4ed8; font-weight:600;">${avgRateAI.toFixed(2)}</td>
+        <td>${avgRateRnd.toFixed(2)}</td>
         <td><b>${pct}%</b></td>
       </tr>`;
     }
+
+    const minSinr = Math.floor(Math.min(...sinrRnd) / 5) * 5;
+    const maxSinr = Math.ceil(Math.max(...sinrExh) / 5) * 5;
+    drawLineChart("sinrChart", {
+      labels: snrList.map(s => `${s} dB`),
+      xTitle: "SNR (dB)",
+      yTitle: "SINR trung bình (dB)",
+      yMin: minSinr,
+      yMax: Math.max(maxSinr, 20),
+      yDecimals: 0,
+      datasets: [
+        { label: "Vét cạn", data: sinrExh, color: "#0f172a", width: 2.2, points: true },
+        { label: "AI (DNN)", data: sinrAI, color: "#0f766e", width: 2.2, dash: [6, 4], points: true },
+        { label: "Ngẫu nhiên", data: sinrRnd, color: "#64748b", width: 1.6, dash: [2, 3], points: true }
+      ]
+    });
 
     const maxRate = Math.ceil(Math.max(...rateExh) / 5) * 5;
     drawLineChart("rateChart", {
